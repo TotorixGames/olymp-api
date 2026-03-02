@@ -36,8 +36,9 @@ publishing {
     repositories {
         maven {
             val snapshotsUri = uri("https://repo.einjojo.it/snapshots")
-            val releasesUri = uri("https://repo.einjojo.it/snapshots")
-            url = if (project.extra["tagged"] == true) releasesUri else snapshotsUri;
+            val releasesUri = uri("https://repo.einjojo.it/releases")
+            // Determine repository based on version string
+            url = if (version.toString().endsWith("SNAPSHOT")) snapshotsUri else releasesUri
             credentials {
                 username = System.getenv("REPO_USERNAME")
                 password = System.getenv("REPO_PASSWORD")

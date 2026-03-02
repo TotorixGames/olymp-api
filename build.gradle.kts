@@ -7,31 +7,44 @@ plugins {
     id("me.qoomon.git-versioning") version "6.4.4"
 }
 
-version = "1.5.3"
+version = "0.0.0-SNAPSHOT"  // Will be overridden by git-versioning
+
 subprojects {
     apply(plugin = "java-library")
     apply(plugin = "com.gradleup.shadow")
     apply(plugin = "me.qoomon.git-versioning")
     group = "it.einjojo"
     version = rootProject.version
-    extra["tagged"] = false
+
     gitVersioning.apply {
+        // Use describe strategy for shallow clones (works with fetch-depth: 1)
+        describeTagPattern = "v(?<version>.*)"
+
         refs {
-            tag("v(?<version>.*)") {
-                extra["tagged"] = true
-                version = if (name == "api") {
-                    "\${ref.version.major}.\${ref.version.minor}"
-                } else {
-                    "\${ref.version}"
-                }
+            // Release tags: v1.2.3 -> 1.2.3 (Maven Central compliant)
+            tag("v(?<version>\\d+\\.\\d+\\.\\d+)") {
+                version = "\${ref.version}"
+            }
+
+            // Pre-release tags: v1.2.3-alpha.1 -> 1.2.3-alpha.1 (Maven Central compliant)
+            tag("v(?<version>\\d+\\.\\d+\\.\\d+-.+)") {
+                version = "\${ref.version}"
+            }
+
+            // Main/master branch: SNAPSHOT versions for development
+            branch("main|master") {
+                version = "\${describe.tag.version}-SNAPSHOT"
+            }
+
+            // Feature branches: include branch name for clarity
+            branch(".+") {
+                version = "\${describe.tag.version}-\${ref.slug}-SNAPSHOT"
             }
         }
+
+        // Fallback for untagged commits (shallow clones without tags)
         rev {
-            version = if (name == "api") {
-                "\${version.major}.\${version.minor}-\${commit.short}"
-            } else {
-                "\${version}-\${commit.short}"
-            }
+            version = "0.0.0-\${commit.short}-SNAPSHOT"
         }
     }
 

@@ -26,6 +26,11 @@ jobs:
     steps:
       - name: Checkout Git Repository
         uses: actions/checkout@v6
+        with:
+          # Fetch only the last commit for speed (shallow clone)
+          fetch-depth: 1
+          # BUT fetch tags separately for versioning to work
+          fetch-tags: true
 
       - name: Setup JDK ${{ matrix.java }}
         uses: actions/setup-java@v5
