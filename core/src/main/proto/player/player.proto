@@ -62,13 +62,22 @@ message GetOnlinePlayerResponse {
 message OnlinePlayerDefinition {
   string unique_id = 1;
   string username = 2;
+  // timestamp epoch milliseconds
   int64 first_login = 3;
+  // timestamp epoch milliseconds
   int64 last_login = 4;
   // playtime millis
   int64 online_time = 5;
+  // any string or 'unknown'
   string connected_server_name = 6;
+  // any string or 'unknown'
   string connected_proxy_name = 7;
   int64 session_id = 8;
+  // Optional login data
+  string ip_address = 9; // IP address of the client
+  string hostname = 10; // Hostname used to connect
+  int32 protocol_version = 11; // Minecraft protocol version
+  string locale = 12; // Client locale (e.g., "en_US", "de_DE")
 }
 
 message UniqueIdLookupResponse {
