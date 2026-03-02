@@ -101,10 +101,8 @@ message LoginRequest {
   string ip_address = 6; // IP address of the client
   string hostname = 7; // Hostname used to connect (from handshake)
   int32 protocol_version = 8; // Minecraft protocol version number
-  string client_brand = 9; // Client brand (e.g., "vanilla", "forge", "fabric")
   string locale = 10; // Client locale (e.g., "en_US", "de_DE")
   int64 connection_timestamp = 11; // Timestamp when the connection was established
-  string minecraft_version = 12; // Minecraft version string (e.g., "1.20.1")
 }
 
 // Dispatched by Service when a player has logged in
