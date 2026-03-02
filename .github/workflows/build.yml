@@ -6,6 +6,13 @@ on:
     tags: [ 'v*' ]
   pull_request:
     branches: [ main, master ]
+# Avoids redundant builds on the same branch
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -15,9 +22,9 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6
         with:
-          # Fetch only the last commit for speed (shallow clone)
-          fetch-depth: 1
-          # BUT fetch tags separately for versioning to work
+          # Use fetch-depth: 0 to get full history including tags
+          # Git versioning needs the full tag history to work
+          fetch-depth: 0
           fetch-tags: true
 
       - name: Set up JDK 21
@@ -56,9 +63,9 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
-          fetch-depth: 1
+          fetch-depth: 0
           fetch-tags: true
 
       - name: Set up JDK 21
@@ -75,6 +82,8 @@ jobs:
         env:
           MAVEN_USERNAME: ${{ secrets.MAVEN_USERNAME }}
           MAVEN_PASSWORD: ${{ secrets.MAVEN_PASSWORD }}
+          REPO_USERNAME: ${{ secrets.REPO_USERNAME }}
+          REPO_PASSWORD: ${{ secrets.REPO_PASSWORD }}
           SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
           SIGNING_PASSWORD: ${{ secrets.SIGNING_PASSWORD }}
 

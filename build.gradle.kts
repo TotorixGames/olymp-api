@@ -18,7 +18,9 @@ subprojects {
 
     gitVersioning.apply {
         // Use describe strategy for shallow clones (works with fetch-depth: 1)
+        // This will gracefully degrade when tags are not available
         describeTagPattern = "v(?<version>.*)"
+        describeTagFirstParent = true
 
         refs {
             // Release tags: v1.2.3 -> 1.2.3 (Maven Central compliant)
@@ -33,16 +35,17 @@ subprojects {
 
             // Main/master branch: SNAPSHOT versions for development
             branch("main|master") {
-                version = "\${describe.tag.version}-SNAPSHOT"
+                version = "\${describe.tag.version:0.0.0}-SNAPSHOT"
             }
 
             // Feature branches: include branch name for clarity
             branch(".+") {
-                version = "\${describe.tag.version}-\${ref.slug}-SNAPSHOT"
+                version = "\${describe.tag.version:0.0.0}-\${ref.slug}-SNAPSHOT"
             }
         }
 
-        // Fallback for untagged commits (shallow clones without tags)
+        // Fallback for untagged commits or shallow clones without tags
+        // This handles the case where git describe fails in shallow clones
         rev {
             version = "0.0.0-\${commit.short}-SNAPSHOT"
         }
