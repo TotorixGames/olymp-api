@@ -26,7 +26,8 @@ public class ConnectionRequestManager implements Consumer<ConnectResponse> {
 
     public ConnectionRequestManager(RedisPubSubHandler pubSubHandler) {
         pubSubHandler.setConnectResponseConsumer(this);
-        this.connection = Objects.requireNonNull(pubSubHandler.getConnection());
+        // Use getOpenConnection() to ensure connection is initialized
+        this.connection = pubSubHandler.getOpenConnection();
     }
 
     /**

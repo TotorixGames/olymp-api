@@ -1,6 +1,7 @@
 package it.einjojo.playerapi;
 
 import com.google.protobuf.InvalidProtocolBufferException;
+import io.lettuce.core.ClientOptions;
 import io.lettuce.core.RedisClient;
 import io.lettuce.core.RedisURI;
 import io.lettuce.core.codec.ByteArrayCodec;
@@ -18,9 +19,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.Closeable;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
-import java.util.LinkedList;
-import java.util.List;
+import java.util.Objects;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executor;
 import java.util.function.Consumer;
 
@@ -28,22 +30,26 @@ import java.util.function.Consumer;
  * @author EinjoJo
  * <p>Lazy redis handler. Stays inactive as long as no consumers are registered.</p>
  * <p>Listens to playerapi:login and playerapi:logout channels and dispatch the received protobuf messages to the provided consumers.</p>
+ * <p>This class is thread-safe. Multiple consumers can be registered for login/logout notifications.</p>
+ * <p>Note: Connect request/response channels support only a single consumer - calling set methods multiple times will overwrite the previous consumer.</p>
  */
 public class RedisPubSubHandler extends RedisPubSubAdapter<byte[], byte[]> implements Closeable {
-    protected static final byte[] LOGIN_NOTIFY_CHANNEL = "plapi:li".getBytes();
-    protected static final byte[] LOGOUT_NOTIFY_CHANNEL = "plapi:lo".getBytes();
-    protected static final byte[] CONNECT_REQ_CHANNEL = "plapi:co".getBytes();
-    protected static final byte[] CONNECT_RES_CHANNEL = "plapi:rco".getBytes();
+    protected static final byte[] LOGIN_NOTIFY_CHANNEL = "plapi:li".getBytes(StandardCharsets.UTF_8);
+    protected static final byte[] LOGOUT_NOTIFY_CHANNEL = "plapi:lo".getBytes(StandardCharsets.UTF_8);
+    protected static final byte[] CONNECT_REQ_CHANNEL = "plapi:co".getBytes(StandardCharsets.UTF_8);
+    protected static final byte[] CONNECT_RES_CHANNEL = "plapi:rco".getBytes(StandardCharsets.UTF_8);
     private static final Logger log = LoggerFactory.getLogger(RedisPubSubHandler.class);
     private final RedisURI redisUri;
     private final Executor executor;
-    private @Nullable List<Consumer<LoginNotify>> loginNotifyConsumers;
-    private @Nullable List<Consumer<LogoutNotify>> logoutNotifyConsumers;
+    private @Nullable CopyOnWriteArrayList<Consumer<LoginNotify>> loginNotifyConsumers;
+    private @Nullable CopyOnWriteArrayList<Consumer<LogoutNotify>> logoutNotifyConsumers;
     private @Nullable Consumer<ConnectRequest> connectRequestConsumer;
     private @Nullable Consumer<ConnectResponse> connectResponseConsumer;
     private @Nullable RedisClient client;
     private @Nullable StatefulRedisPubSubConnection<byte[], byte[]> connection;
     private final Object connectionLock = new Object();
+    private final Object loginConsumerLock = new Object();
+    private final Object logoutConsumerLock = new Object();
 
 
     /**
@@ -52,77 +58,172 @@ public class RedisPubSubHandler extends RedisPubSubAdapter<byte[], byte[]> imple
      * @param redisConnectionConfiguration config
      * @param executor                     avoid blocking Event-Loop in Pub Sub Listener
      */
-    public RedisPubSubHandler(@NotNull RedisConnectionConfiguration redisConnectionConfiguration, Executor executor) {
+    public RedisPubSubHandler(@NotNull RedisConnectionConfiguration redisConnectionConfiguration, @NotNull Executor executor) {
         this.redisUri = redisConnectionConfiguration.createUri("playerapi");
-        this.executor = executor;
+        this.executor = Objects.requireNonNull(executor, "executor must not be null");
     }
 
+    /**
+     * Subscribe to login notifications. Multiple consumers can be registered.
+     * The returned Closeable can be used to unsubscribe this specific consumer.
+     * When the last consumer is removed, the channel subscription is automatically cancelled.
+     *
+     * @param consumer the consumer to receive login notifications
+     * @return a Closeable to unsubscribe this consumer
+     */
+    public Closeable subscribeLogin(@NotNull Consumer<LoginNotify> consumer) {
+        Objects.requireNonNull(consumer, "consumer must not be null");
 
-    public Closeable subscribeLogin(Consumer<LoginNotify> consumer) {
-        var connection = getOpenConnection();
-        if (loginNotifyConsumers == null) {
-            loginNotifyConsumers = new LinkedList<>();
-            connection.sync().subscribe(LOGIN_NOTIFY_CHANNEL);
-            log.info("Subscribed to login notify channel");
+        synchronized (loginConsumerLock) {
+            if (loginNotifyConsumers == null) {
+                loginNotifyConsumers = new CopyOnWriteArrayList<>();
+                var connection = getOpenConnection();
+                connection.sync().subscribe(LOGIN_NOTIFY_CHANNEL);
+                log.info("Subscribed to login notify channel");
+            }
+            loginNotifyConsumers.add(consumer);
+            log.info("Registered login notify consumer (total: {})", loginNotifyConsumers.size());
         }
-        loginNotifyConsumers.add(consumer);
-        log.info("Registered login notify consumer");
-        return () -> loginNotifyConsumers.remove(consumer);
+
+        return () -> {
+            synchronized (loginConsumerLock) {
+                if (loginNotifyConsumers != null) {
+                    loginNotifyConsumers.remove(consumer);
+                    log.info("Removed login notify consumer (remaining: {})", loginNotifyConsumers.size());
+
+                    if (loginNotifyConsumers.isEmpty()) {
+                        var conn = connection;
+                        if (conn != null && conn.isOpen()) {
+                            conn.sync().unsubscribe(LOGIN_NOTIFY_CHANNEL);
+                            log.info("Unsubscribed from login notify channel (no consumers left)");
+                        }
+                        loginNotifyConsumers = null;
+                    }
+                }
+            }
+        };
     }
 
+    /**
+     * Subscribe to logout notifications. Multiple consumers can be registered.
+     * The returned Closeable can be used to unsubscribe this specific consumer.
+     * When the last consumer is removed, the channel subscription is automatically cancelled.
+     *
+     * @param consumer the consumer to receive logout notifications
+     * @return a Closeable to unsubscribe this consumer
+     */
+    public Closeable subscribeLogout(@NotNull Consumer<LogoutNotify> consumer) {
+        Objects.requireNonNull(consumer, "consumer must not be null");
 
-    public Closeable subscribeLogout(Consumer<LogoutNotify> consumer) {
-        var connection = getOpenConnection();
-        if (logoutNotifyConsumers == null) {
-            logoutNotifyConsumers = new LinkedList<>();
-            connection.sync().subscribe(LOGOUT_NOTIFY_CHANNEL);
-            log.info("Subscribed to logout notify channel");
+        synchronized (logoutConsumerLock) {
+            if (logoutNotifyConsumers == null) {
+                logoutNotifyConsumers = new CopyOnWriteArrayList<>();
+                var connection = getOpenConnection();
+                connection.sync().subscribe(LOGOUT_NOTIFY_CHANNEL);
+                log.info("Subscribed to logout notify channel");
+            }
+            logoutNotifyConsumers.add(consumer);
+            log.info("Registered logout notify consumer (total: {})", logoutNotifyConsumers.size());
         }
-        logoutNotifyConsumers.add(consumer);
-        log.info("Registered logout notify consumer");
-        return () -> logoutNotifyConsumers.remove(consumer);
+
+        return () -> {
+            synchronized (logoutConsumerLock) {
+                if (logoutNotifyConsumers != null) {
+                    logoutNotifyConsumers.remove(consumer);
+                    log.info("Removed logout notify consumer (remaining: {})", logoutNotifyConsumers.size());
+
+                    if (logoutNotifyConsumers.isEmpty()) {
+                        var conn = connection;
+                        if (conn != null && conn.isOpen()) {
+                            conn.sync().unsubscribe(LOGOUT_NOTIFY_CHANNEL);
+                            log.info("Unsubscribed from logout notify channel (no consumers left)");
+                        }
+                        logoutNotifyConsumers = null;
+                    }
+                }
+            }
+        };
     }
 
+
+    /**
+     * Set the consumer for connect requests. Only ONE consumer is supported.
+     * Calling this method multiple times will OVERWRITE the previous consumer.
+     *
+     * @param consumer the consumer to receive connect requests
+     */
     @ApiStatus.Internal
-    protected void setConnectRequestConsumer(Consumer<ConnectRequest> consumer) {
+    protected void setConnectRequestConsumer(@NotNull Consumer<ConnectRequest> consumer) {
+        Objects.requireNonNull(consumer, "consumer must not be null");
         var connection = getOpenConnection();
         if (connectRequestConsumer == null) {
             connection.sync().subscribe(CONNECT_REQ_CHANNEL);
             log.info("Subscribed to connect request channel");
+        } else {
+            log.warn("Overwriting existing connect request consumer");
         }
         connectRequestConsumer = consumer;
     }
 
+
+    /**
+     * Set the consumer for connect responses. Only ONE consumer is supported.
+     * Calling this method multiple times will OVERWRITE the previous consumer.
+     *
+     * @param consumer the consumer to receive connect responses
+     */
     @ApiStatus.Internal
-    protected void setConnectResponseConsumer(Consumer<ConnectResponse> consumer) {
+    protected void setConnectResponseConsumer(@NotNull Consumer<ConnectResponse> consumer) {
+        Objects.requireNonNull(consumer, "consumer must not be null");
         var connection = getOpenConnection();
         if (connectResponseConsumer == null) {
             connection.sync().subscribe(CONNECT_RES_CHANNEL);
             log.info("Subscribed to connect response channel");
+        } else {
+            log.warn("Overwriting existing connect response consumer");
         }
         connectResponseConsumer = consumer;
     }
 
-    public @NotNull StatefulRedisPubSubConnection<byte[], byte[]> getOpenConnection() {
 
-        if (connection != null) {
-            return connection;
+    /**
+     * Get or lazily create the Redis pub/sub connection.
+     * This method is thread-safe and uses double-checked locking.
+     * The connection is configured with auto-reconnect enabled.
+     *
+     * @return the active pub/sub connection
+     * @throws io.lettuce.core.RedisConnectionException if connection fails
+     */
+    public @NotNull StatefulRedisPubSubConnection<byte[], byte[]> getOpenConnection() {
+        StatefulRedisPubSubConnection<byte[], byte[]> conn = connection;
+        if (conn != null && conn.isOpen()) {
+            return conn;
         }
 
         synchronized (connectionLock) {
-            if (connection == null) {
+            conn = connection;
+            if (conn == null || !conn.isOpen()) {
                 if (client == null) {
                     client = RedisClient.create(redisUri);
-                    log.info("Created redis client");
-                }
-                this.connection = client.connectPubSub(ByteArrayCodec.INSTANCE);
-                this.connection.addListener(this);
-            }
-        }
 
-        log.info("Opened connection to redis pub sub");
-        return connection;
+                    // Configure client with best practices
+                    ClientOptions options = ClientOptions.builder()
+                            .autoReconnect(true)
+                            .disconnectedBehavior(ClientOptions.DisconnectedBehavior.REJECT_COMMANDS)
+                            .build();
+                    client.setOptions(options);
+
+                    log.info("Created redis client with auto-reconnect enabled");
+                }
+                conn = client.connectPubSub(ByteArrayCodec.INSTANCE);
+                conn.addListener(this);
+                connection = conn;
+                log.info("Opened connection to redis pub sub");
+            }
+            return conn;
+        }
     }
+
 
     @Override
     public void message(byte[] channel, byte[] message) {
@@ -203,13 +304,54 @@ public class RedisPubSubHandler extends RedisPubSubAdapter<byte[], byte[]> imple
         return connection;
     }
 
+    /**
+     * Close the Redis connection and client.
+     * This method is idempotent and thread-safe.
+     * It will unsubscribe from all channels and shutdown the client gracefully.
+     */
     @Override
     public void close() {
-        if (connection != null) {
-            connection.close();
+        synchronized (connectionLock) {
+            if (connection != null) {
+                try {
+                    // Unsubscribe from all channels before closing
+                    if (connection.isOpen()) {
+                        try {
+                            connection.sync().unsubscribe();
+                            log.info("Unsubscribed from all channels");
+                        } catch (Exception e) {
+                            log.warn("Error during unsubscribe", e);
+                        }
+                    }
+                    connection.close();
+                    log.info("Closed Redis pub/sub connection");
+                } catch (Exception e) {
+                    log.error("Error closing connection", e);
+                } finally {
+                    connection = null;
+                }
+            }
+
+            if (client != null) {
+                try {
+                    client.shutdown();
+                    log.info("Shutdown Redis client");
+                } catch (Exception e) {
+                    log.error("Error shutting down client", e);
+                } finally {
+                    client = null;
+                }
+            }
         }
-        if (client != null) {
-            client.close();
+
+        // Clear consumer lists
+        synchronized (loginConsumerLock) {
+            loginNotifyConsumers = null;
         }
+        synchronized (logoutConsumerLock) {
+            logoutNotifyConsumers = null;
+        }
+        connectRequestConsumer = null;
+        connectResponseConsumer = null;
     }
 }
