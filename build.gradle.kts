@@ -7,7 +7,7 @@ plugins {
     id("me.qoomon.git-versioning") version "6.4.4"
 }
 
-version = "0.0.0-SNAPSHOT"  // Will be overridden by git-versioning
+version = "0.0.0-SNAPSHOT"  // Default fallback version
 
 subprojects {
     apply(plugin = "java-library")
@@ -17,35 +17,33 @@ subprojects {
     version = rootProject.version
 
     gitVersioning.apply {
-        // Use describe strategy for shallow clones (works with fetch-depth: 1)
-        // This will gracefully degrade when tags are not available
+        // Pattern to match git tags
         describeTagPattern = "v(?<version>.*)"
         describeTagFirstParent = true
 
         refs {
-            // Release tags: v1.2.3 -> 1.2.3 (Maven Central compliant)
+            // Release tags: v1.2.3 -> 1.2.3
             tag("v(?<version>\\d+\\.\\d+\\.\\d+)") {
                 version = "\${ref.version}"
             }
 
-            // Pre-release tags: v1.2.3-alpha.1 -> 1.2.3-alpha.1 (Maven Central compliant)
+            // Pre-release tags: v1.2.3-alpha.1 -> 1.2.3-alpha.1
             tag("v(?<version>\\d+\\.\\d+\\.\\d+-.+)") {
                 version = "\${ref.version}"
             }
 
-            // Main/master branch: SNAPSHOT versions for development
+            // Main/master branch: use describe tag version if available, else SNAPSHOT
             branch("main|master") {
-                version = "\${describe.tag.version:0.0.0}-SNAPSHOT"
+                version = "\${describe.tag.version}-SNAPSHOT"
             }
 
-            // Feature branches: include branch name for clarity
+            // Feature/hotfix branches: include branch slug in version
             branch(".+") {
-                version = "\${describe.tag.version:0.0.0}-\${ref.slug}-SNAPSHOT"
+                version = "\${describe.tag.version}-\${ref.slug}-SNAPSHOT"
             }
         }
 
-        // Fallback for untagged commits or shallow clones without tags
-        // This handles the case where git describe fails in shallow clones
+        // Ultimate fallback: use commit hash when describe fails or no tags exist
         rev {
             version = "0.0.0-\${commit.short}-SNAPSHOT"
         }
@@ -56,9 +54,6 @@ subprojects {
         maven("https://repo.papermc.io/repository/maven-public/")
     }
 
-
-
-
     dependencies {
         compileOnly("org.jetbrains:annotations:26.0.2-1")
     }
@@ -66,17 +61,19 @@ subprojects {
     java {
         toolchain.languageVersion.set(JavaLanguageVersion.of(21))
     }
+
     tasks.withType<JavaCompile> {
         options.release.set(21)
         options.encoding = "UTF-8"
     }
+
     tasks.named("assemble") {
         dependsOn(tasks.named("shadowJar"))
     }
 
     if (project.name == "api" || project.name == "playerapi") {
         tasks.named("shadowJar", ShadowJar::class) {
-            enabled = false;
+            enabled = false
         }
     } else if (project.name == "velocity" || project.name == "paper") {
         tasks.named("shadowJar", ShadowJar::class) {
@@ -90,13 +87,3 @@ subprojects {
         }
     }
 }
-
-tasks {
-    shadowJar {
-        enabled = false;
-    }
-    jar {
-        enabled = false;
-    }
-}
-
