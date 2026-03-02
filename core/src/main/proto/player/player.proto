@@ -22,6 +22,7 @@ service PlayerService {
   rpc Login(LoginRequest) returns (LoginNotify);
   rpc Logout(LogoutRequest) returns (LogoutNotify);
   rpc GetUniqueIdByName(PlayerNameRequest) returns (UniqueIdLookupResponse);
+  rpc TabComplete(TabCompleteRequest) returns (TabCompleteResponse);
 }
 
 
@@ -97,6 +98,13 @@ message LoginRequest {
   string proxy_name = 3;
   string skin_texture = 4;
   string skin_signature = 5;
+  string ip_address = 6; // IP address of the client
+  string hostname = 7; // Hostname used to connect (from handshake)
+  int32 protocol_version = 8; // Minecraft protocol version number
+  string client_brand = 9; // Client brand (e.g., "vanilla", "forge", "fabric")
+  string locale = 10; // Client locale (e.g., "en_US", "de_DE")
+  int64 connection_timestamp = 11; // Timestamp when the connection was established
+  string minecraft_version = 12; // Minecraft version string (e.g., "1.20.1")
 }
 
 // Dispatched by Service when a player has logged in
@@ -115,6 +123,19 @@ message LogoutNotify {
   bool success = 1;
   int64 closed_session_id = 2;
   OfflinePlayerDefinition player = 3;
+}
+
+// Request for tab completion of player names
+message TabCompleteRequest {
+  string input = 1; // The partial name input to complete
+  optional string sender_unique_id = 2; // UUID of the sender (for context-aware completion)
+  optional bool online_only = 3; // If true, only return online players (default: false)
+  optional int32 max_results = 4; // Maximum number of results to return (default: 20)
+}
+
+// Response for tab completion
+message TabCompleteResponse {
+  repeated string names = 1; // List of matching player names
 }
 
 /*
