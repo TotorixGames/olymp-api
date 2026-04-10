@@ -2,36 +2,50 @@ import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
 
 
 plugins {
-    id("java")
+    id("java-library")
     id("com.gradleup.shadow") version "9.0.0"
     id("me.qoomon.git-versioning") version "6.4.4"
 }
 
-version = "1.5.3"
+version = "0.0.0-SNAPSHOT"  // Default fallback version
+
 subprojects {
     apply(plugin = "java-library")
     apply(plugin = "com.gradleup.shadow")
     apply(plugin = "me.qoomon.git-versioning")
     group = "it.einjojo"
     version = rootProject.version
-    extra["tagged"] = false
+
     gitVersioning.apply {
+        // Pattern to match git tags
+        describeTagPattern = "v(?<version>.*)"
+        describeTagFirstParent = true
+
         refs {
-            tag("v(?<version>.*)") {
-                extra["tagged"] = true
-                version = if (name == "api") {
-                    "\${ref.version.major}.\${ref.version.minor}"
-                } else {
-                    "\${ref.version}"
-                }
+            // Release tags: v1.2.3 -> 1.2.3
+            tag("v(?<version>\\d+\\.\\d+\\.\\d+)") {
+                version = "\${ref.version}"
+            }
+
+            // Pre-release tags: v1.2.3-alpha.1 -> 1.2.3-alpha.1
+            tag("v(?<version>\\d+\\.\\d+\\.\\d+-.+)") {
+                version = "\${ref.version}"
+            }
+
+            // Main/master branch: use describe tag version if available, else SNAPSHOT
+            branch("main|master") {
+                version = "\${describe.tag.version}-SNAPSHOT"
+            }
+
+            // Feature/hotfix branches: include branch slug in version
+            branch(".+") {
+                version = "\${describe.tag.version}-\${ref.slug}-SNAPSHOT"
             }
         }
+
+        // Ultimate fallback: use commit hash when describe fails or no tags exist
         rev {
-            version = if (name == "api") {
-                "\${version.major}.\${version.minor}-\${commit.short}"
-            } else {
-                "\${version}-\${commit.short}"
-            }
+            version = "0.0.0-\${commit.short}-SNAPSHOT"
         }
     }
 
@@ -40,9 +54,6 @@ subprojects {
         maven("https://repo.papermc.io/repository/maven-public/")
     }
 
-
-
-
     dependencies {
         compileOnly("org.jetbrains:annotations:26.0.2-1")
     }
@@ -50,17 +61,19 @@ subprojects {
     java {
         toolchain.languageVersion.set(JavaLanguageVersion.of(21))
     }
+
     tasks.withType<JavaCompile> {
         options.release.set(21)
         options.encoding = "UTF-8"
     }
+
     tasks.named("assemble") {
         dependsOn(tasks.named("shadowJar"))
     }
 
     if (project.name == "api" || project.name == "playerapi") {
         tasks.named("shadowJar", ShadowJar::class) {
-            enabled = false;
+            enabled = false
         }
     } else if (project.name == "velocity" || project.name == "paper") {
         tasks.named("shadowJar", ShadowJar::class) {
@@ -74,12 +87,3 @@ subprojects {
         }
     }
 }
-tasks {
-    shadowJar {
-        enabled = false;
-    }
-    jar {
-        enabled = false;
-    }
-}
-

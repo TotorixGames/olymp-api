@@ -63,7 +63,6 @@ public class PaperPlayerApiProviderPlugin extends JavaPlugin {
         if (getServer().getOnlineMode()) {
             getSLF4JLogger().info("Detected online mode. This Server will handle authentication for players.");
             getServer().getPluginManager().registerEvents(new PaperProxylessConnectionListener(this, playerApi, executor), this);
-            ;
         } else {
             getSLF4JLogger().info("Detected offline mode. This Server will verify players' sessions");
             getServer().getPluginManager().registerEvents(new PaperConnectionVerifyListener(log, PlayerServiceGrpc.newBlockingV2Stub(channel), this), this);
@@ -73,47 +72,59 @@ public class PaperPlayerApiProviderPlugin extends JavaPlugin {
 
     @Override
     public void onDisable() {
-        log.info("Shutting down...");
-        ((AbstractPlayerApi) PlayerApiProvider.getInstance()).shutdown();
-        // Shutdown executor first to stop new tasks
-        if (!executor.isShutdown()) {
-            executor.shutdown();
-            try {
-                if (!executor.awaitTermination(3, TimeUnit.SECONDS)) {
-                    log.warn("Executor did not terminate in time, forcing shutdown...");
-                    executor.shutdownNow();
-                    executor.awaitTermination(2, TimeUnit.SECONDS);
-                }
-                getSLF4JLogger().info("Executor service has been shut down.");
-            } catch (InterruptedException e) {
-                log.warn("Interrupted while waiting for executor shutdown.", e);
-                executor.shutdownNow();
-                Thread.currentThread().interrupt();
-            }
-        } else {
-            getSLF4JLogger().warn("Executor service was already shut down or not initialized.");
+        log.info("Shutting down PlayerApi...");
+
+        // 1. Shutdown PlayerApi (closes Redis connections)
+        try {
+            ((AbstractPlayerApi) PlayerApiProvider.getInstance()).shutdown();
+        } catch (Exception e) {
+            log.error("Error during PlayerApi shutdown", e);
         }
 
-        // Then shutdown gRPC channel gracefully
-        if (channel != null && !channel.isShutdown()) {
-            channel.shutdown(); // Initiate graceful shutdown first
-            try {
-                if (!channel.awaitTermination(5, TimeUnit.SECONDS)) {
-                    log.warn("gRPC channel did not terminate gracefully, forcing shutdown...");
-                    channel.shutdownNow();
-                    if (!channel.awaitTermination(5, TimeUnit.SECONDS)) {
-                        log.error("gRPC channel did not terminate even after force shutdown.");
-                    }
+        // 2. Shutdown executor service
+        shutdownExecutor();
+
+        // 3. Shutdown gRPC channel
+        shutdownChannel();
+
+        log.info("PlayerApi shutdown complete.");
+    }
+
+    private void shutdownExecutor() {
+        executor.shutdown();
+        try {
+            if (!executor.awaitTermination(3, TimeUnit.SECONDS)) {
+                log.warn("Executor did not terminate gracefully, forcing shutdown...");
+                executor.shutdownNow();
+                if (!executor.awaitTermination(2, TimeUnit.SECONDS)) {
+                    log.error("Executor did not terminate after forced shutdown");
                 }
-                getSLF4JLogger().info("gRPC channel has been shut down.");
-            } catch (InterruptedException e) {
-                log.warn("Interrupted while waiting for gRPC channel shutdown.", e);
-                channel.shutdownNow();
-                Thread.currentThread().interrupt();
             }
-        } else {
-            getSLF4JLogger().warn("gRPC channel was already shut down or not initialized.");
+        } catch (InterruptedException e) {
+            log.warn("Interrupted during executor shutdown", e);
+            executor.shutdownNow();
+            Thread.currentThread().interrupt();
         }
-        log.info("PlayerApi Paper plugin has been disabled.");
+    }
+
+    private void shutdownChannel() {
+        if (channel == null) {
+            return;
+        }
+
+        channel.shutdown();
+        try {
+            if (!channel.awaitTermination(5, TimeUnit.SECONDS)) {
+                log.warn("gRPC channel did not terminate gracefully, forcing shutdown...");
+                channel.shutdownNow();
+                if (!channel.awaitTermination(2, TimeUnit.SECONDS)) {
+                    log.error("gRPC channel did not terminate after forced shutdown");
+                }
+            }
+        } catch (InterruptedException e) {
+            log.warn("Interrupted during gRPC shutdown", e);
+            channel.shutdownNow();
+            Thread.currentThread().interrupt();
+        }
     }
 }

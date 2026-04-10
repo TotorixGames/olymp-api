@@ -45,7 +45,7 @@ public class PaperPlayerApi extends AbstractPlayerApi {
 
     @Override
     public CompletableFuture<ServerConnectResult> connectPlayer(UUID uuid, String serviceName) {
-        return getConnectionRequestManager().newRequest(uuid, serviceName);
+        return getConnectionRequestManager().sendWithResponse(uuid, serviceName);
     }
 
     public ConnectionRequestManager getConnectionRequestManager() {
@@ -57,6 +57,16 @@ public class PaperPlayerApi extends AbstractPlayerApi {
 
     @Override
     public void connectPlayerToServer(UUID uuid, String serviceName) {
-        getConnectionRequestManager().fireAndForget(uuid, serviceName);
+        getConnectionRequestManager().sendFireAndForget(uuid, serviceName);
+    }
+
+    @Override
+    public void shutdown() {
+        // Close ConnectionRequestManager if it was initialized
+        if (connectionRequestManager != null) {
+            connectionRequestManager.close();
+        }
+        // Call parent shutdown to close RedisPubSubHandler
+        super.shutdown();
     }
 }

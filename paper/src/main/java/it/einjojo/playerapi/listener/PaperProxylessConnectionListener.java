@@ -57,24 +57,56 @@ public class PaperProxylessConnectionListener implements Listener {
     @EventHandler
     public void loginPlayer(PlayerJoinEvent event) {
         event.getPlayer().sendActionBar(miniMessage.deserialize("<prefix>Logging in..."));
+
+        Player player = event.getPlayer();
+
+        // Extract skin properties
         String skinTexture = "";
         String skinSignature = "";
-        for (var property : event.getPlayer().getPlayerProfile().getProperties()) {
+        for (var property : player.getPlayerProfile().getProperties()) {
             if (property.getName().equals("textures")) {
                 skinTexture = property.getValue();
                 skinSignature = property.getSignature();
                 break;
             }
         }
-        ListenableFuture<LoginNotify> loginFuture = playerApi.playerServiceStub.login(LoginRequest.newBuilder()
-                .setProxyName("-")
-                .setUsername(event.getPlayer().getName())
-                .setUniqueId(event.getPlayer().getUniqueId().toString())
-                .setSkinTexture(skinTexture)
-                .setSkinSignature(skinSignature)
-                .build());
-        loginFuture.addListener(() -> {
 
+        // Extract connection information
+        String ipAddress = player.getAddress() != null
+                ? player.getAddress().getAddress().getHostAddress()
+                : "127.0.0.1";
+        String hostname = player.getAddress() != null
+                ? player.getAddress().getHostString()
+                : "";
+        int protocolVersion = player.getProtocolVersion();
+        String locale = player.locale().toString();
+        long connectionTimestamp = System.currentTimeMillis();
+
+        // Build login request with all available data
+        var loginRequestBuilder = LoginRequest.newBuilder()
+                .setProxyName("-")
+                .setUsername(player.getName())
+                .setUniqueId(player.getUniqueId().toString())
+                .setIpAddress(ipAddress)
+                .setProtocolVersion(protocolVersion)
+                .setLocale(locale)
+                .setConnectionTimestamp(connectionTimestamp);
+
+        // Add optional skin data
+        if (!skinTexture.isEmpty()) {
+            loginRequestBuilder.setSkinTexture(skinTexture);
+        }
+        if (skinSignature != null && !skinSignature.isEmpty()) {
+            loginRequestBuilder.setSkinSignature(skinSignature);
+        }
+        if (!hostname.isEmpty()) {
+            loginRequestBuilder.setHostname(hostname);
+        }
+
+        ListenableFuture<LoginNotify> loginFuture = playerApi.playerServiceStub.login(
+                loginRequestBuilder.build());
+
+        loginFuture.addListener(() -> {
             try {
                 var result = loginFuture.resultNow();
                 event.getPlayer().sendActionBar(miniMessage.deserialize("<prefix>Logged in as " + result.getPlayer().getUsername()));

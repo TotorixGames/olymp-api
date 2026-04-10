@@ -56,47 +56,61 @@ public class VelocityPlayerApiProviderPlugin {
 
     @Subscribe
     public void onProxyShutdown(ProxyShutdownEvent event) {
-        logger.info("Shutting down.");
-        ((AbstractPlayerApi) PlayerApiProvider.getInstance()).shutdown();
-        // Shutdown executor first to stop new tasks
-        if (!executor.isShutdown()) {
-            executor.shutdown();
-            try {
-                if (!executor.awaitTermination(3, TimeUnit.SECONDS)) {
-                    logger.warn("Executor did not terminate in time, forcing shutdown...");
-                    executor.shutdownNow();
-                    executor.awaitTermination(2, TimeUnit.SECONDS);
-                }
-                logger.info("Executor service has been shut down.");
-            } catch (InterruptedException e) {
-                logger.warn("Interrupted while waiting for executor shutdown.", e);
-                executor.shutdownNow();
-                Thread.currentThread().interrupt();
-            }
-        } else {
-            logger.warn("Executor service was already shut down or not initialized.");
+        logger.info("Shutting down PlayerApi...");
+
+        // 1. Shutdown PlayerApi (closes Redis connections)
+        try {
+            ((AbstractPlayerApi) PlayerApiProvider.getInstance()).shutdown();
+        } catch (Exception e) {
+            logger.error("Error during PlayerApi shutdown", e);
         }
 
-        // Then shutdown gRPC channel gracefully
-        if (channel != null && !channel.isShutdown()) {
-            channel.shutdown();
-            try {
-                if (!channel.awaitTermination(5, TimeUnit.SECONDS)) {
-                    logger.warn("gRPC channel did not terminate gracefully, forcing shutdown...");
-                    channel.shutdownNow();
-                    if (!channel.awaitTermination(5, TimeUnit.SECONDS)) {
-                        logger.error("gRPC channel did not terminate even after force shutdown.");
-                    }
+        // 2. Shutdown executor service
+        shutdownExecutor();
+
+        // 3. Shutdown gRPC channel
+        shutdownChannel();
+
+        logger.info("PlayerApi shutdown complete.");
+    }
+
+    private void shutdownExecutor() {
+        executor.shutdown();
+        try {
+            if (!executor.awaitTermination(3, TimeUnit.SECONDS)) {
+                logger.warn("Executor did not terminate gracefully, forcing shutdown...");
+                executor.shutdownNow();
+                if (!executor.awaitTermination(2, TimeUnit.SECONDS)) {
+                    logger.error("Executor did not terminate after forced shutdown");
                 }
-                logger.info("gRPC channel has been shut down.");
-            } catch (InterruptedException e) {
-                logger.warn("Interrupted while waiting for gRPC channel shutdown.", e);
-                channel.shutdownNow();
-                Thread.currentThread().interrupt();
             }
-        } else {
-            logger.warn("gRPC channel was already shut down or not initialized.");
+        } catch (InterruptedException e) {
+            logger.warn("Interrupted during executor shutdown", e);
+            executor.shutdownNow();
+            Thread.currentThread().interrupt();
         }
     }
+
+    private void shutdownChannel() {
+        if (channel == null) {
+            return;
+        }
+
+        channel.shutdown();
+        try {
+            if (!channel.awaitTermination(5, TimeUnit.SECONDS)) {
+                logger.warn("gRPC channel did not terminate gracefully, forcing shutdown...");
+                channel.shutdownNow();
+                if (!channel.awaitTermination(2, TimeUnit.SECONDS)) {
+                    logger.error("gRPC channel did not terminate after forced shutdown");
+                }
+            }
+        } catch (InterruptedException e) {
+            logger.warn("Interrupted during gRPC shutdown", e);
+            channel.shutdownNow();
+            Thread.currentThread().interrupt();
+        }
+    }
+
 
 }

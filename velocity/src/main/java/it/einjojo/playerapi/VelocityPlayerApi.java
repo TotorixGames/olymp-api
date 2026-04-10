@@ -17,13 +17,14 @@ import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.function.Consumer;
 
 public class VelocityPlayerApi extends AbstractPlayerApi implements Consumer<ConnectRequest> {
-    private static final String PROXY_NAME = "velocity";
+    private static final String PROXY_NAME = Optional.ofNullable(System.getenv("PLAYER_API_PROXY_NAME")).orElse("NO_ENV.PLAYER_API_PROXY_NAME");
     private static final Logger log = LoggerFactory.getLogger(VelocityPlayerApi.class);
     private final LocalOnlinePlayerAccessor localOnlinePlayerAccessor;
     private final RedisPubSubHandler redisPubSubHandler;
@@ -55,6 +56,7 @@ public class VelocityPlayerApi extends AbstractPlayerApi implements Consumer<Con
 
 
     public CompletableFuture<NetworkPlayer> handleLogin(Player player) {
+        // Extract skin properties
         String skinTexture = null;
         String skinSignature = null;
         for (var prop : player.getGameProfile().getProperties()) {
@@ -64,13 +66,41 @@ public class VelocityPlayerApi extends AbstractPlayerApi implements Consumer<Con
                 break;
             }
         }
-        var future = super.playerServiceStub.login(LoginRequest.newBuilder()
+
+        // Extract connection information
+        String ipAddress = player.getRemoteAddress().getAddress().getHostAddress();
+        String hostname = player.getVirtualHost()
+                .map(java.net.InetSocketAddress::getHostString)
+                .orElse("");
+        int protocolVersion = player.getProtocolVersion().getProtocol();
+        String locale = player.getPlayerSettings().getLocale().toString();
+        long connectionTimestamp = System.currentTimeMillis();
+
+        // Build login request with all available data
+        var loginRequestBuilder = LoginRequest.newBuilder()
                 .setUniqueId(player.getUniqueId().toString())
                 .setUsername(player.getUsername())
                 .setProxyName(PROXY_NAME)
-                .setSkinTexture(skinTexture)
-                .setSkinSignature(skinSignature)
-                .build());
+                .setIpAddress(ipAddress)
+                .setProtocolVersion(protocolVersion)
+                .setLocale(locale)
+                .setConnectionTimestamp(connectionTimestamp);
+
+        // Add optional fields
+        if (skinTexture != null) {
+            loginRequestBuilder.setSkinTexture(skinTexture);
+        }
+        if (skinSignature != null) {
+            loginRequestBuilder.setSkinSignature(skinSignature);
+        }
+        if (!hostname.isEmpty()) {
+            loginRequestBuilder.setHostname(hostname);
+        }
+
+        // Note: client_brand and minecraft_version require additional packet listening
+        // These would need to be populated after the player joins if available
+
+        var future = super.playerServiceStub.login(loginRequestBuilder.build());
         return createCallback(future, (response) -> PlayerMapper.toLocal(response.getPlayer()));
     }
 
@@ -126,11 +156,9 @@ public class VelocityPlayerApi extends AbstractPlayerApi implements Consumer<Con
     public void accept(ConnectRequest connectRequest) {
         UUID uuid = UUID.fromString(connectRequest.getUniqueId());
         String name = connectRequest.getServerName();
-
         connectPlayer(uuid, name)
-                .thenAccept(result -> {
-                    respondIfRequired(connectRequest, result);
-                }).exceptionally(ex -> {
+                .thenAccept(result -> respondIfRequired(connectRequest, result))
+                .exceptionally(ex -> {
                     respondIfRequired(connectRequest, ServerConnectResult.ERROR);
                     log.error("Failed to handle connect request for player {}", uuid, ex);
                     return null;
@@ -179,5 +207,9 @@ public class VelocityPlayerApi extends AbstractPlayerApi implements Consumer<Con
             }
         }
         return server;
+    }
+
+    public ProxyServer getProxyServer() {
+        return proxyServer;
     }
 }

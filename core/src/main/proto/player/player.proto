@@ -22,6 +22,7 @@ service PlayerService {
   rpc Login(LoginRequest) returns (LoginNotify);
   rpc Logout(LogoutRequest) returns (LogoutNotify);
   rpc GetUniqueIdByName(PlayerNameRequest) returns (UniqueIdLookupResponse);
+  rpc TabComplete(TabCompleteRequest) returns (TabCompleteResponse);
 }
 
 
@@ -61,13 +62,22 @@ message GetOnlinePlayerResponse {
 message OnlinePlayerDefinition {
   string unique_id = 1;
   string username = 2;
+  // timestamp epoch milliseconds
   int64 first_login = 3;
+  // timestamp epoch milliseconds
   int64 last_login = 4;
   // playtime millis
   int64 online_time = 5;
+  // any string or 'unknown'
   string connected_server_name = 6;
+  // any string or 'unknown'
   string connected_proxy_name = 7;
   int64 session_id = 8;
+  // Optional login data
+  string ip_address = 9; // IP address of the client
+  string hostname = 10; // Hostname used to connect
+  int32 protocol_version = 11; // Minecraft protocol version
+  string locale = 12; // Client locale (e.g., "en_US", "de_DE")
 }
 
 message UniqueIdLookupResponse {
@@ -97,6 +107,11 @@ message LoginRequest {
   string proxy_name = 3;
   string skin_texture = 4;
   string skin_signature = 5;
+  string ip_address = 6; // IP address of the client
+  string hostname = 7; // Hostname used to connect (from handshake)
+  int32 protocol_version = 8; // Minecraft protocol version number
+  string locale = 9; // Client locale (e.g., "en_US", "de_DE")
+  int64 connection_timestamp = 10; // Timestamp when the connection was established
 }
 
 // Dispatched by Service when a player has logged in
@@ -115,6 +130,19 @@ message LogoutNotify {
   bool success = 1;
   int64 closed_session_id = 2;
   OfflinePlayerDefinition player = 3;
+}
+
+// Request for tab completion of player names
+message TabCompleteRequest {
+  string input = 1; // The partial name input to complete
+  optional string sender_unique_id = 2; // UUID of the sender (for context-aware completion)
+  optional bool online_only = 3; // If true, only return online players (default: false)
+  optional int32 max_results = 4; // Maximum number of results to return (default: 20)
+}
+
+// Response for tab completion
+message TabCompleteResponse {
+  repeated string names = 1; // List of matching player names
 }
 
 /*
