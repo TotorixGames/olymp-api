@@ -23,7 +23,9 @@ import java.util.function.Function;
  * This class uses gRPC to communicate with a player service and provides methods to retrieve player information
  */
 public abstract class AbstractPlayerApi implements PlayerApi {
+
     public PlayerServiceGrpc.PlayerServiceFutureStub playerServiceStub;
+    private final AfkServiceApi afkServiceApi;
     protected final Executor executor;
     private static final Empty EMPTY = Empty.getDefaultInstance();
 
@@ -35,21 +37,30 @@ public abstract class AbstractPlayerApi implements PlayerApi {
      */
     public AbstractPlayerApi(ManagedChannel channel, Executor executor) {
         this.playerServiceStub = PlayerServiceGrpc.newFutureStub(channel);
+        this.afkServiceApi = new AfkServiceApiImpl(channel, executor);
         this.executor = executor;
     }
 
-    private static List<NetworkPlayer> extractOnlinePlayers(GetOnlinePlayersResponse response) {
-        if (response.getPlayersList().isEmpty()) return List.of();
-        return response.getPlayersList().stream()
-                .map(PlayerMapper::toLocal)
-                .toList();
+    /**
+     * Returns the {@link AfkServiceApi} used to resolve AFK status for online players.
+     *
+     * @return the AFK service API; never {@code null}
+     */
+    protected AfkServiceApi getAfkServiceApi() {
+        return afkServiceApi;
     }
 
+    private List<NetworkPlayer> extractOnlinePlayers(GetOnlinePlayersResponse response) {
+        if (response.getPlayersList().isEmpty()) return List.of();
+        return response.getPlayersList().stream()
+                .map(def -> PlayerMapper.toLocal(def, afkServiceApi))
+                .toList();
+    }
 
     @Override
     public CompletableFuture<List<NetworkPlayer>> getOnlinePlayers() {
         ListenableFuture<GetOnlinePlayersResponse> future = playerServiceStub.getOnlinePlayers(EMPTY);
-        return createCallback(future, AbstractPlayerApi::extractOnlinePlayers);
+        return createCallback(future, this::extractOnlinePlayers);
     }
 
     @Override
@@ -57,7 +68,6 @@ public abstract class AbstractPlayerApi implements PlayerApi {
         ListenableFuture<GetOnlinePlayerNamesResponse> future = playerServiceStub.getOnlinePlayerNames(EMPTY);
         return createCallback(future, (GetOnlinePlayerNamesResponse::getNamesList));
     }
-
 
     @Override
     public CompletableFuture<OfflineNetworkPlayer> getOfflinePlayer(String playerName) {
@@ -93,14 +103,14 @@ public abstract class AbstractPlayerApi implements PlayerApi {
     public CompletableFuture<NetworkPlayer> getOnlinePlayer(String playerName) {
         if (playerName == null) return CompletableFuture.completedFuture(null);
         ListenableFuture<GetOnlinePlayerResponse> future = playerServiceStub.getOnlinePlayerByName(PlayerNameRequest.newBuilder().setName(playerName).build());
-        return createCallback(future, PlayerMapper::readOnlineResponse);
+        return createCallback(future, response -> PlayerMapper.readOnlineResponse(response, afkServiceApi));
     }
 
     @Override
     public CompletableFuture<NetworkPlayer> getOnlinePlayer(UUID playerUUID) {
         if (playerUUID == null) return CompletableFuture.completedFuture(null);
         ListenableFuture<GetOnlinePlayerResponse> future = playerServiceStub.getOnlinePlayerByUniqueId(PlayerIdRequest.newBuilder().setUniqueId(playerUUID.toString()).build());
-        return createCallback(future, PlayerMapper::readOnlineResponse);
+        return createCallback(future, response -> PlayerMapper.readOnlineResponse(response, afkServiceApi));
     }
 
     @Override
@@ -138,7 +148,7 @@ public abstract class AbstractPlayerApi implements PlayerApi {
     @Override
     public Closeable subscribeLogin(@NotNull Consumer<NetworkPlayer> playerConsumer) {
         return getRedisPubSubHandler().subscribeLogin(((notify) -> {
-            playerConsumer.accept(PlayerMapper.toLocal(notify.getPlayer()));
+            playerConsumer.accept(PlayerMapper.toLocal(notify.getPlayer(), afkServiceApi));
         }));
     }
 
@@ -153,12 +163,10 @@ public abstract class AbstractPlayerApi implements PlayerApi {
 
     public abstract LocalOnlinePlayerAccessor getLocalOnlinePlayerAccessor();
 
-
     /**
      * Closes internal resources.
      */
     public void shutdown() {
         getRedisPubSubHandler().close();
     }
-
 }
