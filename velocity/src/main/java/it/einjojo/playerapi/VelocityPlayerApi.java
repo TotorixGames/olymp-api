@@ -101,7 +101,7 @@ public class VelocityPlayerApi extends AbstractPlayerApi implements Consumer<Con
         // These would need to be populated after the player joins if available
 
         var future = super.playerServiceStub.login(loginRequestBuilder.build());
-        return createCallback(future, (response) -> PlayerMapper.toLocal(response.getPlayer()));
+        return createCallback(future, (response) -> PlayerMapper.toLocal(response.getPlayer(), getAfkServiceApi()));
     }
 
     public CompletableFuture<Boolean> handleLogout(Player player) {
