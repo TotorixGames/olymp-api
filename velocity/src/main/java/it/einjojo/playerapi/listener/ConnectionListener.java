@@ -137,6 +137,10 @@ public class ConnectionListener {
      */
     @Subscribe
     public void handleDisconnect(DisconnectEvent event) {
+        if (event.getLoginStatus() != DisconnectEvent.LoginStatus.SUCCESSFUL_LOGIN) {
+            return;
+        }
+
         final String playerName = event.getPlayer().getUsername();
         final UUID playerId = event.getPlayer().getUniqueId();
 
