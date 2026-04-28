@@ -45,6 +45,8 @@ message OfflinePlayerDefinition {
   // playtime millis
   int64 online_time = 5;
   bool online = 6;
+  // total accumulated AFK duration in millis across all sessions
+  int64 afk_duration = 7;
 }
 
 message PlayerIdRequest {
@@ -66,7 +68,7 @@ message OnlinePlayerDefinition {
   int64 first_login = 3;
   // timestamp epoch milliseconds
   int64 last_login = 4;
-  // playtime millis
+  // playtime millis (excluding current session)
   int64 online_time = 5;
   // any string or 'unknown'
   string connected_server_name = 6;
@@ -78,6 +80,11 @@ message OnlinePlayerDefinition {
   string hostname = 10; // Hostname used to connect
   int32 protocol_version = 11; // Minecraft protocol version
   string locale = 12; // Client locale (e.g., "en_US", "de_DE")
+  // epoch millis when current AFK started; 0 if player is not AFK
+  int64 afk_since = 13;
+  // accumulated AFK millis this session, excluding the current ongoing AFK window
+  // client must add (current_time - afk_since) when afk_since > 0 for full AFK duration
+  int64 stored_afk_duration = 14;
 }
 
 message UniqueIdLookupResponse {

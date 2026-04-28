@@ -44,7 +44,7 @@ public interface NetworkPlayer extends OfflineNetworkPlayer {
      * <p>The result is fetched lazily from the AFK service on each invocation.
      *
      * @return a future completing with {@code true} if the player is AFK, {@code false} otherwise;
-     *         completes with {@code null} if the player was not found remotely
+     * completes with {@code null} if the player was not found remotely
      */
     CompletableFuture<Boolean> isAfk();
 
@@ -55,7 +55,14 @@ public interface NetworkPlayer extends OfflineNetworkPlayer {
      *
      * @param afk {@code true} to mark the player as AFK, {@code false} to clear AFK status
      * @return a future completing when the operation has been acknowledged by the service,
-     *         or completing exceptionally on failure
+     * or completing exceptionally on failure
      */
     CompletableFuture<Void> setAfk(boolean afk);
+
+    /**
+     * Gets the state of this object upon object creation
+     *
+     * @return true / false
+     */
+    boolean isAfkSnapshot();
 }

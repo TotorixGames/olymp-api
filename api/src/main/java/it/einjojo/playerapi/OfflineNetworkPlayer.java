@@ -32,9 +32,17 @@ public interface OfflineNetworkPlayer {
      * Playtime
      *
      * @return accumulated playtime in milliseconds.
+     * <p>
+     * Does not contain the current session time.
      * @see NetworkPlayer#getSessionTime()
      */
     long getPlaytime();
 
+    /**
+     * always up-to-date duration millis.
+     *
+     * @return the duration
+     */
+    long getAfkDuration();
 
 }

@@ -46,7 +46,7 @@ public abstract class AbstractPlayerApi implements PlayerApi {
      *
      * @return the AFK service API; never {@code null}
      */
-    protected AfkServiceApi getAfkServiceApi() {
+    public AfkServiceApi getAfkServiceApi() {
         return afkServiceApi;
     }
 

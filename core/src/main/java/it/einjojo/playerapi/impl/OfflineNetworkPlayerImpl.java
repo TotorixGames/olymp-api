@@ -11,14 +11,16 @@ public class OfflineNetworkPlayerImpl implements OfflineNetworkPlayer {
     private final long lastPlayed;
     private final long playtime;
     private final boolean online;
+    private final long afkDuration;
 
-    public OfflineNetworkPlayerImpl(UUID uniqueId, String name, long firstPlayed, long lastPlayed, long playtime, boolean online) {
+    public OfflineNetworkPlayerImpl(UUID uniqueId, String name, long firstPlayed, long lastPlayed, long playtime, boolean online, long afkDuration) {
         this.uniqueId = uniqueId;
         this.name = name;
         this.firstPlayed = firstPlayed;
         this.lastPlayed = lastPlayed;
         this.playtime = playtime;
         this.online = online;
+        this.afkDuration = afkDuration;
     }
 
 
@@ -52,6 +54,10 @@ public class OfflineNetworkPlayerImpl implements OfflineNetworkPlayer {
         return playtime;
     }
 
+    @Override
+    public long getAfkDuration() {
+        return afkDuration;
+    }
 
 
 }

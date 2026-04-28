@@ -5,11 +5,10 @@ import io.grpc.ManagedChannel;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
 import it.einjojo.playerapi.AfkServiceApi;
-import it.einjojo.protocol.player.AFKServiceGrpc;
-import it.einjojo.protocol.player.GetAFKStatusRequest;
-import it.einjojo.protocol.player.GetAFKStatusResponse;
-import it.einjojo.protocol.player.SetAFKRequest;
-import it.einjojo.protocol.player.SetAFKResponse;
+import net.totorix.protocol.player.AFKServiceGrpc;
+import net.totorix.protocol.player.GetAFKStatusRequest;
+import net.totorix.protocol.player.GetAFKStatusResponse;
+import net.totorix.protocol.player.SetAFKRequest;
 
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;

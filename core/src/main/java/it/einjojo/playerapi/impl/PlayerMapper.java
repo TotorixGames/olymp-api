@@ -19,7 +19,8 @@ public class PlayerMapper {
                 playerDefinition.getFirstLogin(),
                 playerDefinition.getLastLogin(),
                 playerDefinition.getOnlineTime(),
-                playerDefinition.getOnline()
+                playerDefinition.getOnline(),
+                playerDefinition.getAfkDuration()
         );
     }
 
@@ -34,7 +35,9 @@ public class PlayerMapper {
                 playerDefinition.getConnectedServerName(),
                 playerDefinition.getConnectedProxyName(),
                 playerDefinition.getSessionId(),
-                afkServiceApi
+                afkServiceApi,
+                playerDefinition.getAfkSince(),
+                playerDefinition.getStoredAfkDuration()
         );
     }
 

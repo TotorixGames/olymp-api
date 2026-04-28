@@ -14,15 +14,18 @@ public class NetworkPlayerImpl extends OfflineNetworkPlayerImpl implements Netwo
     private final String proxyName;
     private final long sessionId;
     private final AfkServiceApi afkServiceApi;
+    private final long afkSince;
 
     public NetworkPlayerImpl(UUID uniqueId, String name, long firstPlayed, long lastPlayed,
                              long playtime, boolean online, String serverName, String proxyName,
-                             long sessionId, @NotNull AfkServiceApi afkServiceApi) {
-        super(uniqueId, name, firstPlayed, lastPlayed, playtime, online);
+                             long sessionId, @NotNull AfkServiceApi afkServiceApi, long afkSince, long afkDuration) {
+        super(uniqueId, name, firstPlayed, lastPlayed, playtime, online, afkDuration);
         this.serverName = serverName;
         this.proxyName = proxyName;
         this.sessionId = sessionId;
         this.afkServiceApi = afkServiceApi;
+        this.afkSince = afkSince;
+
     }
 
     @Override
@@ -48,5 +51,19 @@ public class NetworkPlayerImpl extends OfflineNetworkPlayerImpl implements Netwo
     @Override
     public CompletableFuture<Void> setAfk(boolean afk) {
         return afkServiceApi.setAfk(getUniqueId(), afk);
+    }
+
+
+    public boolean isAfkSnapshot() {
+        return afkSince != 0;
+    }
+
+
+    @Override
+    public long getAfkDuration() {
+        if (isAfkSnapshot()) {
+            return super.getAfkDuration() + (System.currentTimeMillis() - afkSince);
+        }
+        return super.getAfkDuration();
     }
 }

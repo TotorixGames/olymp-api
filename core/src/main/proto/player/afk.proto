@@ -3,7 +3,7 @@ package player;
 
 option java_outer_classname = "AfkProto";
 option java_multiple_files = true;
-option java_package = "it.einjojo.protocol.player";
+option java_package = "net.totorix.protocol.player";
 
 service AFKService {
   rpc SetAFK(SetAFKRequest) returns (SetAFKResponse);
@@ -25,4 +25,9 @@ message GetAFKStatusRequest {
 
 message GetAFKStatusResponse {
   bool afk = 1;
+  // epoch millis when current AFK started; 0 if player is not AFK
+  int64 afk_since = 2;
+  // accumulated AFK millis this session, excluding the current ongoing AFK window
+  // client must add (current_time - afk_since) when afk_since > 0 for full AFK duration
+  int64 stored_afk_duration = 3;
 }

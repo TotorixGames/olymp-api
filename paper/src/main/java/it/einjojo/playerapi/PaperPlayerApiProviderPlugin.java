@@ -11,6 +11,7 @@ import it.einjojo.playerapi.listener.PaperConnectionVerifyListener;
 import it.einjojo.playerapi.listener.PaperProxylessConnectionListener;
 import it.einjojo.protocol.player.PlayerServiceGrpc;
 import org.bukkit.Bukkit;
+import org.bukkit.plugin.ServicePriority;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.slf4j.Logger;
 
@@ -56,7 +57,7 @@ public class PaperPlayerApiProviderPlugin extends JavaPlugin {
             log.info("gRPC channel to PlayerApi server changed state: {}", newState);
         });
         PaperPlayerApi playerApi = new PaperPlayerApi(channel, executor, redisConfig);
-
+        getServer().getServicesManager().register(AfkServiceApi.class, playerApi.getAfkServiceApi(), this, ServicePriority.Normal);
         PlayerApiProvider.register(playerApi);
         Bukkit.getServer().getMessenger().registerOutgoingPluginChannel(this, "BungeeCord");
         getSLF4JLogger().info("PlayerApi Paper plugin has been initialized.");
