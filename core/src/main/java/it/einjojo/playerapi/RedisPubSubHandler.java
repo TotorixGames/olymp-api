@@ -22,6 +22,7 @@ import java.io.Closeable;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Objects;
+import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executor;
 import java.util.function.Consumer;
@@ -41,6 +42,8 @@ public class RedisPubSubHandler extends RedisPubSubAdapter<byte[], byte[]> imple
     private static final Logger log = LoggerFactory.getLogger(RedisPubSubHandler.class);
     private final RedisURI redisUri;
     private final Executor executor;
+    // Unique per-instance channel so only this server receives its own ConnectResponses
+    private final byte[] instanceReplyChannel;
     private @Nullable CopyOnWriteArrayList<Consumer<LoginNotify>> loginNotifyConsumers;
     private @Nullable CopyOnWriteArrayList<Consumer<LogoutNotify>> logoutNotifyConsumers;
     private @Nullable Consumer<ConnectRequest> connectRequestConsumer;
@@ -61,6 +64,13 @@ public class RedisPubSubHandler extends RedisPubSubAdapter<byte[], byte[]> imple
     public RedisPubSubHandler(@NotNull RedisConnectionConfiguration redisConnectionConfiguration, @NotNull Executor executor) {
         this.redisUri = redisConnectionConfiguration.createUri("playerapi");
         this.executor = Objects.requireNonNull(executor, "executor must not be null");
+        this.instanceReplyChannel = ("plapi:rco:" + UUID.randomUUID().toString().replace("-", ""))
+                .getBytes(StandardCharsets.UTF_8);
+    }
+
+    /** Returns the unique Redis channel name this instance subscribes to for ConnectResponses. */
+    public String getInstanceReplyChannelName() {
+        return new String(instanceReplyChannel, StandardCharsets.UTF_8);
     }
 
     /**
@@ -177,8 +187,8 @@ public class RedisPubSubHandler extends RedisPubSubAdapter<byte[], byte[]> imple
         Objects.requireNonNull(consumer, "consumer must not be null");
         var connection = getOpenConnection();
         if (connectResponseConsumer == null) {
-            connection.sync().subscribe(CONNECT_RES_CHANNEL);
-            log.info("Subscribed to connect response channel");
+            connection.sync().subscribe(instanceReplyChannel);
+            log.info("Subscribed to per-instance connect response channel: {}", getInstanceReplyChannelName());
         } else {
             log.warn("Overwriting existing connect response consumer");
         }
@@ -278,7 +288,7 @@ public class RedisPubSubHandler extends RedisPubSubAdapter<byte[], byte[]> imple
             } catch (InvalidProtocolBufferException e) {
                 log.error("Failed to parse ConnectRequest message", e);
             }
-        } else if (connectResponseConsumer != null && Arrays.equals(channel, CONNECT_RES_CHANNEL)) {
+        } else if (connectResponseConsumer != null && Arrays.equals(channel, instanceReplyChannel)) {
             try {
                 ConnectResponse connectResponse = ConnectResponse.parseFrom(message);
                 var consumer = connectResponseConsumer;

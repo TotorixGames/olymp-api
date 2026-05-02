@@ -32,6 +32,7 @@ public class ConnectionRequestManager implements Consumer<ConnectResponse>, Auto
     private static final long CLEANUP_INTERVAL_SECONDS = 30;
 
     private final DistributedIdGenerator idGenerator;
+    private final String replyChannel;
     private final StatefulRedisPubSubConnection<byte[], byte[]> connection;
     private final ConcurrentHashMap<Integer, PendingRequest> pendingRequests = new ConcurrentHashMap<>();
     private final ScheduledExecutorService cleanupExecutor;
@@ -49,6 +50,7 @@ public class ConnectionRequestManager implements Consumer<ConnectResponse>, Auto
         this.idGenerator = new DistributedIdGenerator();
 
         pubSubHandler.setConnectResponseConsumer(this);
+        this.replyChannel = pubSubHandler.getInstanceReplyChannelName();
         this.connection = pubSubHandler.getOpenConnection();
 
         // Schedule periodic cleanup of expired requests
@@ -65,8 +67,8 @@ public class ConnectionRequestManager implements Consumer<ConnectResponse>, Auto
                 TimeUnit.SECONDS
         );
 
-        log.info("ConnectionRequestManager initialized (server_id={}, cleanup_interval={}s)",
-                idGenerator.getServerId(), CLEANUP_INTERVAL_SECONDS);
+        log.info("ConnectionRequestManager initialized (server_id={}, reply_channel={}, cleanup_interval={}s)",
+                idGenerator.getServerId(), replyChannel, CLEANUP_INTERVAL_SECONDS);
     }
 
     /**
@@ -151,6 +153,7 @@ public class ConnectionRequestManager implements Consumer<ConnectResponse>, Auto
                 .setUniqueId(uuid.toString())
                 .setServerName(serverName)
                 .setResponseKey(responseKey)
+                .setReplyChannel(replyChannel)
                 .build();
 
         // Async publish - non-blocking

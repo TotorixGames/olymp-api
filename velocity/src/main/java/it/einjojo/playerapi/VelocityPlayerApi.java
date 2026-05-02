@@ -17,6 +17,7 @@ import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -182,9 +183,14 @@ public class VelocityPlayerApi extends AbstractPlayerApi implements Consumer<Con
             case ERROR -> ConnectResult.CONNECTION_ERROR;
         };
         ConnectResponse resp = ConnectResponse.newBuilder().setResponseKey(req.getResponseKey()).setResult(protoBufResult).build();
+        // Route to the per-instance channel supplied by the requester so only that server receives the response.
+        // Fall back to the shared channel for old clients that don't set reply_channel.
+        byte[] targetChannel = req.hasReplyChannel()
+                ? req.getReplyChannel().getBytes(StandardCharsets.UTF_8)
+                : RedisPubSubHandler.CONNECT_RES_CHANNEL;
         var conn = getRedisPubSubHandler().getConnection();
         Preconditions.checkNotNull(conn, "Redis must not be null on response");
-        conn.async().publish(RedisPubSubHandler.CONNECT_RES_CHANNEL, resp.toByteArray());
+        conn.async().publish(targetChannel, resp.toByteArray());
     }
 
     /**
