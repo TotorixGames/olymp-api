@@ -4,6 +4,7 @@ import it.einjojo.playerapi.AfkServiceApi;
 import it.einjojo.playerapi.NetworkPlayer;
 import org.jetbrains.annotations.NotNull;
 
+import java.time.Duration;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -65,5 +66,10 @@ public class NetworkPlayerImpl extends OfflineNetworkPlayerImpl implements Netwo
             return super.getAfkDuration() + (System.currentTimeMillis() - afkSince);
         }
         return super.getAfkDuration();
+    }
+
+    @Override
+    public Duration getCurrentPlaytime() {
+        return Duration.ofMillis(getPlaytime() + getSessionTime() - getAfkDuration());
     }
 }

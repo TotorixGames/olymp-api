@@ -1,5 +1,6 @@
 package it.einjojo.playerapi;
 
+import java.time.Duration;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 
@@ -65,4 +66,14 @@ public interface NetworkPlayer extends OfflineNetworkPlayer {
      * @return true / false
      */
     boolean isAfkSnapshot();
+
+
+    /**
+     * Gets the current playtime of the player, including the current session time.
+     * <p>
+     * Includes also afk duration
+     *
+     * @return afk duration
+     */
+    Duration getCurrentPlaytime();
 }
