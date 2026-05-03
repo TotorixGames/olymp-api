@@ -22,6 +22,7 @@ service PlayerService {
   rpc Login(LoginRequest) returns (LoginNotify);
   rpc Logout(LogoutRequest) returns (LogoutNotify);
   rpc GetUniqueIdByName(PlayerNameRequest) returns (UniqueIdLookupResponse);
+
   rpc TabComplete(TabCompleteRequest) returns (TabCompleteResponse);
 }
 

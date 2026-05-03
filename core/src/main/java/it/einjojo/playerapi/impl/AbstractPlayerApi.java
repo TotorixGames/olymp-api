@@ -163,6 +163,33 @@ public abstract class AbstractPlayerApi implements PlayerApi {
 
     public abstract LocalOnlinePlayerAccessor getLocalOnlinePlayerAccessor();
 
+
+    @Override
+    public CompletableFuture<List<String>> tabCompleteOnlinePlayers(String input, UUID completer, int results) {
+        var builder = TabCompleteRequest.newBuilder()
+                .setInput(input)
+                .setOnlineOnly(true)
+                .setMaxResults(results);
+        if (completer != null) {
+            builder.setSenderUniqueId(completer.toString());
+        }
+        ListenableFuture<TabCompleteResponse> future = playerServiceStub.tabComplete(builder.build());
+        return createCallback(future, TabCompleteResponse::getNamesList);
+    }
+
+    @Override
+    public CompletableFuture<List<String>> tabCompleteOfflinePlayers(String input, UUID completer, int results) {
+        var builder = TabCompleteRequest.newBuilder()
+                .setInput(input)
+                .setOnlineOnly(false)
+                .setMaxResults(results);
+        if (completer != null) {
+            builder.setSenderUniqueId(completer.toString());
+        }
+        ListenableFuture<TabCompleteResponse> future = playerServiceStub.tabComplete(builder.build());
+        return createCallback(future, TabCompleteResponse::getNamesList);
+    }
+
     /**
      * Closes internal resources.
      */

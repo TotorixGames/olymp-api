@@ -24,8 +24,49 @@ public interface PlayerApi {
      * Gets the names of all online players.
      *
      * @return a list of player names.
+     * @deprecated in favor for #tabCompelte
      */
+    @Deprecated
     CompletableFuture<List<String>> getOnlinePlayerNames();
+
+
+    /**
+     * Fuzzy search Tab Complete by backend with 12 results
+     *
+     * @param input     what the player has typed in
+     * @param completer uuid of player or null
+     */
+    default CompletableFuture<List<String>> tabCompleteOnlinePlayers(String input, UUID completer) {
+        return tabCompleteOnlinePlayers(input, completer, 12);
+    }
+
+    /**
+     * Fuzzy search Tab Complete by backend with 12 results
+     *
+     * @param input     what the player has typed in
+     * @param completer uuid of player or null
+     */
+    default CompletableFuture<List<String>> tabCompleteOfflinePlayers(String input, UUID completer) {
+        return tabCompleteOnlinePlayers(input, completer, 12);
+    }
+
+    /**
+     * Fuzzy search Tab Complete by backend
+     *
+     * @param input     what the player has typed in
+     * @param completer uuid of player or null
+     * @param results   max response size
+     */
+    CompletableFuture<List<String>> tabCompleteOnlinePlayers(String input, UUID completer, int results);
+
+    /**
+     * Fuzzy search Tab Complete by backend
+     *
+     * @param input     what the player has typed in
+     * @param completer uuid of player or null
+     * @param results   max response size
+     */
+    CompletableFuture<List<String>> tabCompleteOfflinePlayers(String input, UUID completer, int results);
 
     /**
      * Connects a player to a server.
